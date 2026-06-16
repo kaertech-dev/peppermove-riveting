@@ -53,9 +53,9 @@ DB_PASS = os.getenv("DB_PASSWORD") or _CFG.get("database", "password", fallback=
 
 def get_conn():
     return pymysql.connect(
-        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASS,
+        host=DB_HOST,  user=DB_USER, password=DB_PASS,
         cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
-    )
+    )#port=DB_PORT,
 
 def _dt_to_str(row):
     for k, v in row.items():
