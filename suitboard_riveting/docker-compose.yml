@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  container: Peppermove
+  images: peppermove_riveting
+  suitboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5080:5080"
+    volumes:
+      - ./exports:/app/exports
+      - ./static:/app/static:ro
+      - ./config.ini:/app/config.ini:ro
+    restart: unless-stopped
+    networks:
+      - manufacturing_network
+networks:
+  manufacturing_network:
+    driver: bridge
