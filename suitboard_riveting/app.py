@@ -46,8 +46,8 @@ def _query(name):
 # DATABASE
 # ─────────────────────────────────────────────
 
-DB_HOST = os.getenv("DB_HOST") or _CFG.get("database", "host",     fallback="192.168.1.38")
-DB_PORT = int(os.getenv("DB_PORT") or _CFG.get("database", "port", fallback="3306"))
+DB_HOST = os.getenv("DB_HOST") or _CFG.get("database", "host",     fallback="192.168.2.5")
+# DB_PORT = int(os.getenv("DB_PORT") or _CFG.get("database", "port", fallback="3306"))
 DB_USER = os.getenv("DB_USER") or _CFG.get("database", "user",     fallback="labeling")
 DB_PASS = os.getenv("DB_PASSWORD") or _CFG.get("database", "password", fallback="labeling")
 
