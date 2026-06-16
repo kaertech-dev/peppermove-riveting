@@ -8,10 +8,16 @@ services:
     ports:
       - "5080:5080"
     restart: always
-    env_file:
-      - .env
     environment:
       - FLASK_ENV=production
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      # - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-labeling}
+      - DB_PASSWORD=${DB_PASSWORD:-labeling}
+    volumes:
+      - ./exports:/app/exports
+      - ./static:/app/static:ro
+      - ./config.ini:/app/config.ini:ro
 
 networks:
   manufacturing_network:
