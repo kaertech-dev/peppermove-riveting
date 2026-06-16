@@ -1,21 +1,18 @@
-version: "3.8"
+
 
 services:
-  container: Peppermove
-  images: peppermove_riveting
-  suitboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  traceability:
+    build: .
+    image: riveting
+    container_name: peppermove-riveting
     ports:
       - "5080:5080"
-    volumes:
-      - ./exports:/app/exports
-      - ./static:/app/static:ro
-      - ./config.ini:/app/config.ini:ro
-    restart: unless-stopped
-    networks:
-      - manufacturing_network
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+
 networks:
   manufacturing_network:
-    driver: bridge
+    external: True
