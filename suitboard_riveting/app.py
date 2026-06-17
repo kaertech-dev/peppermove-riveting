@@ -1,19 +1,6 @@
-"""
-Pepper EMS / Suitboard Riveting – Web App
-Flask backend
-
-Run:
-    pip install flask pymysql python-dotenv
-    python app.py
-
-Config:
-    config.ini  -> DB, table names, queries, CSV settings
-    .env        -> optional DB overrides
-"""
-
 import os, csv, datetime, configparser
 from pathlib import Path
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, render_template
 from dotenv import load_dotenv
 import pymysql, pymysql.cursors
 
@@ -46,16 +33,19 @@ def _query(name):
 # DATABASE
 # ─────────────────────────────────────────────
 
-DB_HOST = os.getenv("DB_HOST") or _CFG.get("database", "host",     fallback="192.168.2.5")
-# DB_PORT = int(os.getenv("DB_PORT") or _CFG.get("database", "port", fallback="3306"))
+DB_HOST = os.getenv("DB_HOST") or _CFG.get("database", "host",     fallback="192.168.1.38")
+DB_PORT = int(os.getenv("DB_PORT") or _CFG.get("database", "port", fallback="3306"))
 DB_USER = os.getenv("DB_USER") or _CFG.get("database", "user",     fallback="labeling")
 DB_PASS = os.getenv("DB_PASSWORD") or _CFG.get("database", "password", fallback="labeling")
 
+# Employee who sees the dev/prod mode selector
+DEV_OPERATOR = _CFG.get("app", "dev_operator", fallback="KE0412").strip().upper()
+
 def get_conn():
     return pymysql.connect(
-        host=DB_HOST,  user=DB_USER, password=DB_PASS,
+        host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASS,
         cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
-    )#port=DB_PORT,
+    )
 
 def _dt_to_str(row):
     for k, v in row.items():
@@ -85,6 +75,13 @@ def serial_exists_in_main(serial):
             cur.execute(_query("serial_exists_in_main"), (serial,))
             return cur.fetchone() is not None
 
+def serial_test_passed(serial):
+    """Return True if suitboard_main.test = 1 for this serial."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_query("serial_test_passed"), (serial,))
+            return cur.fetchone() is not None
+
 def fetch_po_num(serial):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -92,42 +89,64 @@ def fetch_po_num(serial):
             row = cur.fetchone()
             return row["po_num"] if row and row.get("po_num") else ""
 
-def get_riveting_records(limit=200):
+def get_riveting_records(limit=200, mode="production"):
+    query_key = "get_riveting_records_dev" if mode == "development" else "get_riveting_records"
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(_query("get_riveting_records"), (limit,))
+            cur.execute(_query(query_key), (limit,))
             return [_dt_to_str(r) for r in cur.fetchall()]
 
-def insert_riveting_record(record):
+def insert_riveting_record(record, mode="production"):
+    query_key = "insert_riveting_record_dev" if mode == "development" else "insert_riveting_record"
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(_query("insert_riveting_record"), record)
+            cur.execute(_query(query_key), record)
+            cur.execute(_query("update_riveting_flag"), (record["serial_num"],))
+        conn.commit()
+
+
+def insert_depanel_record(record):
+    panel_sn = "K1PES" + record["serial_num"][-8:]
+    depanel_record = {
+        "serial_num":  record["serial_num"],
+        "po_num":      record["po_num"],
+        "operator_en": record["operator_en"],
+        "shift":       record["shift"],
+        "date_time":   record["date_time"],
+        "panel_sn":    panel_sn,
+    }
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_query("insert_depanel_record"), depanel_record)
         conn.commit()
 
 # ─────────────────────────────────────────────
 # CSV
 # ─────────────────────────────────────────────
 
-CSV_ENABLED  = _CFG.getboolean("csv", "enabled",     fallback=True)
-CSV_FOLDER   = _CFG.get("csv", "save_folder",        fallback="./exports")
-CSV_FILENAME = _CFG.get("csv", "filename",            fallback="suitboard_riveting_{date}.csv")
+CSV_ENABLED  = _CFG.getboolean("csv", "enabled",  fallback=True)
+CSV_FOLDER   = _CFG.get("csv", "save_folder",     fallback="./exports")
+CSV_FILENAME = _CFG.get("csv", "filename",        fallback="suitboard_riveting_{date}.csv")
 CSV_HEADERS  = [h.strip() for h in _CFG.get(
     "csv", "headers",
     fallback="serial_num,po_num,operator_en,shift,date_time,suit_size,remarks,status"
 ).split(",")]
 
-def save_to_csv(record):
+def save_to_csv(record, mode="production"):
     if not CSV_ENABLED:
         return
     try:
         folder = Path(CSV_FOLDER)
         folder.mkdir(parents=True, exist_ok=True)
         now = datetime.datetime.now()
-        filename = CSV_FILENAME \
+        base_name = CSV_FILENAME \
             .replace("{date}",  now.strftime("%Y-%m-%d")) \
             .replace("{month}", now.strftime("%Y-%m")) \
             .replace("{year}",  now.strftime("%Y"))
-        filepath = folder / filename
+        # Prefix filename with mode so dev/prod exports don't mix
+        if mode == "development":
+            base_name = "dev_" + base_name
+        filepath = folder / base_name
         file_exists = filepath.exists()
         with open(filepath, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_HEADERS, extrasaction="ignore")
@@ -141,11 +160,12 @@ def save_to_csv(record):
 # FLASK
 # ─────────────────────────────────────────────
 
-app = Flask(__name__, static_folder="static", template_folder="static")
+app = Flask(__name__, static_folder="static", template_folder="templates")
 
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return render_template("index.html")
+
 
 # ── Login ──────────────────────────────────────
 
@@ -161,7 +181,9 @@ def api_login():
         return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
     if not found:
         return jsonify({"ok": False, "error": f"Employee '{emp_num}' not found in database."}), 404
-    return jsonify({"ok": True, "employee_num": emp_num})
+    # Tell the frontend whether this operator gets the dev/prod selector
+    show_mode_selector = (emp_num == DEV_OPERATOR)
+    return jsonify({"ok": True, "employee_num": emp_num, "show_mode_selector": show_mode_selector})
 
 # ── Suit sizes ─────────────────────────────────
 
@@ -182,11 +204,12 @@ def api_check_serial():
     if not serial:
         return jsonify({"ok": False, "error": "Serial number is required."}), 400
     try:
-        found = serial_exists_in_main(serial)
+        if not serial_exists_in_main(serial):
+            return jsonify({"ok": False, "error": f"Serial '{serial}' not found in suitboard_main."}), 404
+        if not serial_test_passed(serial):
+            return jsonify({"ok": False, "error": f"Serial '{serial}' has not passed the Test station (test ≠ 1). Cannot proceed."}), 409
     except Exception as e:
         return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
-    if not found:
-        return jsonify({"ok": False, "error": f"Serial '{serial}' not found in suitboard_main."}), 404
     return jsonify({"ok": True})
 
 # ── Submit record ──────────────────────────────
@@ -198,6 +221,10 @@ def api_submit():
     size     = (data.get("suit_size")   or "").strip()
     operator = (data.get("operator_en") or "").strip()
     shift    = (data.get("shift")       or "").strip()
+    mode     = (data.get("mode")        or "production").strip().lower()
+
+    if mode not in ("development", "production"):
+        mode = "production"
 
     if not serial:
         return jsonify({"ok": False, "error": "Serial number is required."}), 400
@@ -209,10 +236,12 @@ def api_submit():
     try:
         if not serial_exists_in_main(serial):
             return jsonify({"ok": False, "error": f"Serial '{serial}' not found in suitboard_main."}), 404
+        if not serial_test_passed(serial):
+            return jsonify({"ok": False, "error": f"Serial '{serial}' has not passed the Test station (test ≠ 1). Cannot proceed."}), 409
     except Exception as e:
         return jsonify({"ok": False, "error": f"DB error: {e}"}), 500
 
-    po_num   = ""
+    po_num = ""
     try:
         po_num = fetch_po_num(serial)
     except Exception:
@@ -231,21 +260,27 @@ def api_submit():
     }
 
     try:
-        insert_riveting_record(record)
+        insert_riveting_record(record, mode=mode)
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to save record: {e}"}), 500
 
-    save_to_csv(record)
+    try:
+        insert_depanel_record(record)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
 
-    return jsonify({"ok": True, "po_num": po_num, "date_time": now_str})
+    save_to_csv(record, mode=mode)
+
+    return jsonify({"ok": True, "po_num": po_num, "date_time": now_str, "mode": mode})
 
 # ── Records ────────────────────────────────────
 
 @app.route("/api/records", methods=["GET"])
 def api_records():
     limit = int(request.args.get("limit", 200))
+    mode  = request.args.get("mode", "production").strip().lower()
     try:
-        rows = get_riveting_records(limit)
+        rows = get_riveting_records(limit, mode=mode)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     return jsonify({"ok": True, "records": rows})
@@ -253,4 +288,4 @@ def api_records():
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5080)
+    app.run(debug=True, host="0.0.0.0", port=5080, use_reloader=False)
