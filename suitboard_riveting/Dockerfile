@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install Python dependencies (adds gunicorn for production serving)
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY . .
@@ -15,3 +15,4 @@ EXPOSE 5080
 
 # Use gunicorn to serve the Flask app for production
 CMD ["gunicorn", "--bind", "0.0.0.0:5080", "app:app", "--workers", "2"]
+
