@@ -20,5 +20,4 @@ services:
       - ./config.ini:/app/config.ini:ro
 
 networks:
-  manufacturing_network:
     external: True
