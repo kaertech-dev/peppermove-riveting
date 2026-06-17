@@ -18,6 +18,3 @@ services:
       - ./exports:/app/exports
       - ./static:/app/static:ro
       - ./config.ini:/app/config.ini:ro
-
-networks:
-    external: True
