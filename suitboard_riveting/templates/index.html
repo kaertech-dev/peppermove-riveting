@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suitboard Riveting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Arial+Unicode+MS&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+<div class="window-frame">
+
+  <!-- CENTRAL WIDGET -->
+  <div class="central">
+
+    <!-- HEADER (widget_2) -->
+    <div class="header-bar">
+      <!-- <div class="header-logo">
+        <span class="header-logo-placeholder">PEPPER</span>
+      </div> -->
+      <div class="header-title">Suit Size</div>
+      <!-- <div class="header-image">
+        <span style="font-size:11px;color:#aaa;">[image]</span>
+      </div> -->
+    </div>
+
+    <!-- BODY ROW -->
+    <div class="body-row">
+
+      <!-- LEFT: TABLE (columnView) -->
+      <!-- <div class="table-area" id="table-area">
+        <table>
+          <thead>
+            <tr>
+              <th>serial_num</th>
+              <th>po_num</th>
+              <th>operator_en</th>
+              <th>shift</th>
+              <th>date_time</th>
+              <th>suit_size</th>
+              <th>remarks</th>
+              <th>status</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body">
+            <tr class="empty-row"><td colspan="8">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div> -->
+
+      <!-- RIGHT COL -->
+      <div class="right-col">
+
+        <!-- LOGIN (widget_3) -->
+        <div class="login-box">
+          <div class="form-row">
+            <label for="inp-emp">employee_num:</label>
+            <input id="inp-emp" type="text" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="form-row">
+            <label for="inp-shift">Shift:</label>
+            <select id="inp-shift">
+              <option>A</option>
+              <option>B</option>
+            </select>
+          </div>
+
+          <!-- MODE SELECTOR — only visible for KE0412 after login -->
+          <div class="form-row" id="mode-row" style="display:none">
+            <label for="inp-mode">Mode:</label>
+            <select id="inp-mode" disabled>
+              <option value="production">Production</option>
+              <option value="development">Development</option>
+            </select>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:4px;gap:8px">
+            <span class="mode-badge" id="mode-badge" style="display:none"></span>
+            <button class="btn-login" id="btn-login">login</button>
+          </div>
+        </div>
+
+        <!-- SCAN (widget_4) -->
+        <div class="scan-box">
+          <div class="scan-row">
+            <label for="inp-serial">Scan here:</label>
+            <input id="inp-serial" type="text" autocomplete="off"
+                   spellcheck="false" disabled />
+          </div>
+          <div class="scan-row">
+            <label for="inp-size">Suit size:</label>
+            <select id="inp-size" disabled>
+              <option value="">(loading…)</option>
+            </select>
+          </div>
+          <div class="status-label" id="status-label"></div>
+          <div style="overflow:hidden">
+            <button class="btn-submit" id="btn-submit" disabled>Submit</button>
+          </div>
+        </div>
+
+      </div><!-- /right-col -->
+    </div><!-- /body-row -->
+  </div><!-- /central -->
+
+  <!-- STATUS BAR -->
+  <div class="statusbar" id="statusbar">
+    <span id="sb-text">Not logged in.</span>
+  </div>
+
+</div><!-- /window-frame -->
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
