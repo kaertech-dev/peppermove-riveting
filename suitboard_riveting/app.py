@@ -101,7 +101,12 @@ def insert_riveting_record(record, mode="production"):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query(query_key), record)
-            cur.execute(_query("update_riveting_flag"), (record["serial_num"],))
+            # Only flip the production riveting flag for real production
+            # submissions. Dev/test submissions write to suitboard_riveting_dev
+            # and must NOT touch suitboard_main, or test scans would mark
+            # real serials as already riveted in production.
+            if mode != "development":
+                cur.execute(_query("update_riveting_flag"), (record["serial_num"],))
         conn.commit()
 
 
