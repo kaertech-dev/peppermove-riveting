@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, render_template
 from dotenv import load_dotenv
 import pymysql, pymysql.cursors
+from contextlib import contextmanager
 
 # ─────────────────────────────────────────────
 # PATHS & CONFIG
@@ -47,6 +48,14 @@ def get_conn():
         cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
     )
 
+@contextmanager
+def db_conn():
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 def _dt_to_str(row):
     for k, v in row.items():
         if isinstance(v, (datetime.datetime, datetime.date)):
@@ -58,32 +67,32 @@ def _dt_to_str(row):
 # ─────────────────────────────────────────────
 
 def check_operator(emp_num):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("check_operator"), (emp_num,))
             return cur.fetchone() is not None
 
 def fetch_suit_sizes():
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("fetch_suit_sizes"))
             return [r["suitboard_size"] for r in cur.fetchall()]
 
 def serial_exists_in_main(serial):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("serial_exists_in_main"), (serial,))
             return cur.fetchone() is not None
 
 def serial_test_passed(serial):
     """Return True if suitboard_main.test = 1 for this serial."""
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("serial_test_passed"), (serial,))
             return cur.fetchone() is not None
 
 def fetch_po_num(serial):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("fetch_po_num"), (serial,))
             row = cur.fetchone()
@@ -91,17 +100,22 @@ def fetch_po_num(serial):
 
 def get_riveting_records(limit=200, mode="production"):
     query_key = "get_riveting_records_dev" if mode == "development" else "get_riveting_records"
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query(query_key), (limit,))
             return [_dt_to_str(r) for r in cur.fetchall()]
 
 def insert_riveting_record(record, mode="production"):
     query_key = "insert_riveting_record_dev" if mode == "development" else "insert_riveting_record"
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query(query_key), record)
-            cur.execute(_query("update_riveting_flag"), (record["serial_num"],))
+            # Only flip the production riveting flag for real production
+            # submissions. Dev/test submissions write to suitboard_riveting_dev
+            # and must NOT touch suitboard_main, or test scans would mark
+            # real serials as already riveted in production.
+            if mode != "development":
+                cur.execute(_query("update_riveting_flag"), (record["serial_num"],))
         conn.commit()
 
 
@@ -115,7 +129,7 @@ def insert_depanel_record(record):
         "date_time":   record["date_time"],
         "panel_sn":    panel_sn,
     }
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("insert_depanel_record"), depanel_record)
         conn.commit()
@@ -212,6 +226,22 @@ def api_check_serial():
         return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
     return jsonify({"ok": True})
 
+# ── Helper: resolve & authorize requested mode ──
+
+def _resolve_mode(requested_mode, operator_en):
+    """
+    Server-side authority on which mode is actually used.
+    Only DEV_OPERATOR may use 'development' mode — anyone else
+    requesting it (whether via the UI or directly via the API)
+    is silently downgraded to 'production'.
+    """
+    requested_mode = (requested_mode or "production").strip().lower()
+    if requested_mode not in ("development", "production"):
+        requested_mode = "production"
+    if requested_mode == "development" and (operator_en or "").strip().upper() != DEV_OPERATOR:
+        return "production"
+    return requested_mode
+
 # ── Submit record ──────────────────────────────
 
 @app.route("/api/submit", methods=["POST"])
@@ -221,10 +251,6 @@ def api_submit():
     size     = (data.get("suit_size")   or "").strip()
     operator = (data.get("operator_en") or "").strip()
     shift    = (data.get("shift")       or "").strip()
-    mode     = (data.get("mode")        or "production").strip().lower()
-
-    if mode not in ("development", "production"):
-        mode = "production"
 
     if not serial:
         return jsonify({"ok": False, "error": "Serial number is required."}), 400
@@ -232,6 +258,16 @@ def api_submit():
         return jsonify({"ok": False, "error": "Not logged in."}), 401
     if not size:
         return jsonify({"ok": False, "error": "Please select a suit size."}), 400
+
+    # Re-validate the operator actually exists (don't just trust the body)
+    try:
+        if not check_operator(operator.upper()):
+            return jsonify({"ok": False, "error": "Not logged in."}), 401
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"DB error: {e}"}), 500
+
+    # Mode is decided server-side; client's requested mode is only a hint
+    mode = _resolve_mode(data.get("mode"), operator)
 
     try:
         if not serial_exists_in_main(serial):
@@ -264,10 +300,12 @@ def api_submit():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to save record: {e}"}), 500
 
-    try:
-        insert_depanel_record(record)
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
+    # Depanel record only makes sense for real production output
+    if mode == "production":
+        try:
+            insert_depanel_record(record)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
 
     save_to_csv(record, mode=mode)
 
@@ -277,8 +315,9 @@ def api_submit():
 
 @app.route("/api/records", methods=["GET"])
 def api_records():
-    limit = int(request.args.get("limit", 200))
-    mode  = request.args.get("mode", "production").strip().lower()
+    limit    = int(request.args.get("limit", 200))
+    operator = (request.args.get("operator_en") or "").strip()
+    mode     = _resolve_mode(request.args.get("mode"), operator)
     try:
         rows = get_riveting_records(limit, mode=mode)
     except Exception as e:
@@ -288,4 +327,4 @@ def api_records():
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5080, use_reloader=False)
+    app.run(debug=False, host="0.0.0.0", port=5080, use_reloader=False)
