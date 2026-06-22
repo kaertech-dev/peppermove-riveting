@@ -212,6 +212,22 @@ def api_check_serial():
         return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
     return jsonify({"ok": True})
 
+# ── Helper: resolve & authorize requested mode ──
+
+def _resolve_mode(requested_mode, operator_en):
+    """
+    Server-side authority on which mode is actually used.
+    Only DEV_OPERATOR may use 'development' mode — anyone else
+    requesting it (whether via the UI or directly via the API)
+    is silently downgraded to 'production'.
+    """
+    requested_mode = (requested_mode or "production").strip().lower()
+    if requested_mode not in ("development", "production"):
+        requested_mode = "production"
+    if requested_mode == "development" and (operator_en or "").strip().upper() != DEV_OPERATOR:
+        return "production"
+    return requested_mode
+
 # ── Submit record ──────────────────────────────
 
 @app.route("/api/submit", methods=["POST"])
@@ -221,10 +237,6 @@ def api_submit():
     size     = (data.get("suit_size")   or "").strip()
     operator = (data.get("operator_en") or "").strip()
     shift    = (data.get("shift")       or "").strip()
-    mode     = (data.get("mode")        or "production").strip().lower()
-
-    if mode not in ("development", "production"):
-        mode = "production"
 
     if not serial:
         return jsonify({"ok": False, "error": "Serial number is required."}), 400
@@ -232,6 +244,16 @@ def api_submit():
         return jsonify({"ok": False, "error": "Not logged in."}), 401
     if not size:
         return jsonify({"ok": False, "error": "Please select a suit size."}), 400
+
+    # Re-validate the operator actually exists (don't just trust the body)
+    try:
+        if not check_operator(operator.upper()):
+            return jsonify({"ok": False, "error": "Not logged in."}), 401
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"DB error: {e}"}), 500
+
+    # Mode is decided server-side; client's requested mode is only a hint
+    mode = _resolve_mode(data.get("mode"), operator)
 
     try:
         if not serial_exists_in_main(serial):
@@ -264,10 +286,12 @@ def api_submit():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to save record: {e}"}), 500
 
-    try:
-        insert_depanel_record(record)
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
+    # Depanel record only makes sense for real production output
+    if mode == "production":
+        try:
+            insert_depanel_record(record)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
 
     save_to_csv(record, mode=mode)
 
@@ -277,8 +301,9 @@ def api_submit():
 
 @app.route("/api/records", methods=["GET"])
 def api_records():
-    limit = int(request.args.get("limit", 200))
-    mode  = request.args.get("mode", "production").strip().lower()
+    limit    = int(request.args.get("limit", 200))
+    operator = (request.args.get("operator_en") or "").strip()
+    mode     = _resolve_mode(request.args.get("mode"), operator)
     try:
         rows = get_riveting_records(limit, mode=mode)
     except Exception as e:
@@ -288,4 +313,4 @@ def api_records():
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5080, use_reloader=False)
+    app.run(debug=False, host="0.0.0.0", port=5080, use_reloader=False)

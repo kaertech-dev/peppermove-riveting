@@ -63,7 +63,12 @@ async function loadSizes() {
 // ── Load table ──
 async function loadRecords() {
   try {
-    const res  = await fetch(`/api/records?limit=200&mode=${state.mode}`);
+    const params = new URLSearchParams({
+      limit: 200,
+      mode: state.mode,
+      operator_en: state.operator,
+    });
+    const res  = await fetch(`/api/records?${params.toString()}`);
     const data = await res.json();
     if (!data.ok || !data.records.length) {
       tblBody.innerHTML = '<tr class="empty-row"><td colspan="8">No records yet.</td></tr>';
@@ -194,9 +199,11 @@ async function doSubmit() {
       return;
     }
 
-    const modeTag = state.showModeSelector ? ` [${state.mode.toUpperCase()}]` : '';
+    // Trust the mode the server actually used, not just what we asked for
+    const effectiveMode = data.mode || state.mode;
+    const modeTag = state.showModeSelector ? ` [${effectiveMode.toUpperCase()}]` : '';
     setStatus(`✔ Saved!${modeTag}  Serial: ${serial}  |  Size: ${size}  |  PO: ${data.po_num||'—'}`, 'ok');
-    setSB(`Logged in: ${state.operator} | Shift: ${state.shift} | Last: ${serial} | Mode: ${state.mode.toUpperCase()}`);
+    setSB(`Logged in: ${state.operator} | Shift: ${state.shift} | Last: ${serial} | Mode: ${effectiveMode.toUpperCase()}`);
     inpSerial.value = '';
     inpSerial.focus();
     btnSubmit.disabled   = false;
