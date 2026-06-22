@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, render_template
 from dotenv import load_dotenv
 import pymysql, pymysql.cursors
+from contextlib import contextmanager
 
 # ─────────────────────────────────────────────
 # PATHS & CONFIG
@@ -47,6 +48,14 @@ def get_conn():
         cursorclass=pymysql.cursors.DictCursor, connect_timeout=5,
     )
 
+@contextmanager
+def db_conn():
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 def _dt_to_str(row):
     for k, v in row.items():
         if isinstance(v, (datetime.datetime, datetime.date)):
@@ -58,32 +67,32 @@ def _dt_to_str(row):
 # ─────────────────────────────────────────────
 
 def check_operator(emp_num):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("check_operator"), (emp_num,))
             return cur.fetchone() is not None
 
 def fetch_suit_sizes():
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("fetch_suit_sizes"))
             return [r["suitboard_size"] for r in cur.fetchall()]
 
 def serial_exists_in_main(serial):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("serial_exists_in_main"), (serial,))
             return cur.fetchone() is not None
 
 def serial_test_passed(serial):
     """Return True if suitboard_main.test = 1 for this serial."""
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("serial_test_passed"), (serial,))
             return cur.fetchone() is not None
 
 def fetch_po_num(serial):
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("fetch_po_num"), (serial,))
             row = cur.fetchone()
@@ -91,14 +100,14 @@ def fetch_po_num(serial):
 
 def get_riveting_records(limit=200, mode="production"):
     query_key = "get_riveting_records_dev" if mode == "development" else "get_riveting_records"
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query(query_key), (limit,))
             return [_dt_to_str(r) for r in cur.fetchall()]
 
 def insert_riveting_record(record, mode="production"):
     query_key = "insert_riveting_record_dev" if mode == "development" else "insert_riveting_record"
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query(query_key), record)
             # Only flip the production riveting flag for real production
@@ -120,7 +129,7 @@ def insert_depanel_record(record):
         "date_time":   record["date_time"],
         "panel_sn":    panel_sn,
     }
-    with get_conn() as conn:
+    with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_query("insert_depanel_record"), depanel_record)
         conn.commit()
