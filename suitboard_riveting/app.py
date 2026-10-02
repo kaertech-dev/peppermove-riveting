@@ -36,8 +36,8 @@ def _query(name):
 
 DB_HOST = os.getenv("DB_HOST") or _CFG.get("database", "host",     fallback="192.168.1.38")
 DB_PORT = int(os.getenv("DB_PORT") or _CFG.get("database", "port", fallback="3306"))
-DB_USER = os.getenv("DB_USER") or _CFG.get("database", "user",     fallback="labeling")
-DB_PASS = os.getenv("DB_PASSWORD") or _CFG.get("database", "password", fallback="labeling")
+DB_USER = os.getenv("DB_USER") or _CFG.get("database", "user")
+DB_PASS = os.getenv("DB_PASSWORD") or _CFG.get("database", "password")
 
 # Employee who sees the dev/prod mode selector
 DEV_OPERATOR = _CFG.get("app", "dev_operator", fallback="KE0412").strip().upper()
@@ -119,20 +119,20 @@ def insert_riveting_record(record, mode="production"):
         conn.commit()
 
 
-def insert_depanel_record(record):
-    panel_sn = "K1PES" + record["serial_num"][-8:]
-    depanel_record = {
-        "serial_num":  record["serial_num"],
-        "po_num":      record["po_num"],
-        "operator_en": record["operator_en"],
-        "shift":       record["shift"],
-        "date_time":   record["date_time"],
-        "panel_sn":    panel_sn,
-    }
-    with db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(_query("insert_depanel_record"), depanel_record)
-        conn.commit()
+# def insert_depanel_record(record):
+#     panel_sn = "K1PES" + record["serial_num"][-8:]
+#     depanel_record = {
+#         "serial_num":  record["serial_num"],
+#         "po_num":      record["po_num"],
+#         "operator_en": record["operator_en"],
+#         "shift":       record["shift"],
+#         "date_time":   record["date_time"],
+#         "panel_sn":    panel_sn,
+#     }
+#     with db_conn() as conn:
+#         with conn.cursor() as cur:
+#             cur.execute(_query("insert_depanel_record"), depanel_record)
+#         conn.commit()
 
 # ─────────────────────────────────────────────
 # CSV
@@ -301,11 +301,11 @@ def api_submit():
         return jsonify({"ok": False, "error": f"Failed to save record: {e}"}), 500
 
     # Depanel record only makes sense for real production output
-    if mode == "production":
-        try:
-            insert_depanel_record(record)
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
+    # if mode == "production":
+    #     try:
+    #         insert_depanel_record(record)
+    #     except Exception as e:
+    #         return jsonify({"ok": False, "error": f"Failed to save depanel record: {e}"}), 500
 
     save_to_csv(record, mode=mode)
 
