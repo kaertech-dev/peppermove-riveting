@@ -49,7 +49,7 @@ function applyMode(mode) {
 // ── Load suit sizes ──
 async function loadSizes() {
   try {
-    const res  = await fetch('/api/suit-sizes');
+    const res  = await fetch(APP_ROOT + '/api/suit-sizes');
     const data = await res.json();
     if (data.ok && data.sizes.length) {
       inpSize.innerHTML = data.sizes
@@ -68,7 +68,7 @@ async function loadRecords() {
       mode: state.mode,
       operator_en: state.operator,
     });
-    const res  = await fetch(`/api/records?${params.toString()}`);
+    const res  = await fetch(`${APP_ROOT}/api/records?${params.toString()}`);
     const data = await res.json();
     if (!data.ok || !data.records.length) {
       tblBody.innerHTML = '<tr class="empty-row"><td colspan="8">No records yet.</td></tr>';
@@ -101,7 +101,7 @@ async function doLogin() {
   btnLogin.innerHTML = '<span class="spin"></span>…';
 
   try {
-    const res  = await fetch('/api/login', {
+    const res  = await fetch(APP_ROOT + '/api/login', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ employee_num: emp }),
@@ -155,7 +155,7 @@ async function doScanCheck() {
 
   setStatus('Looking up serial…');
   try {
-    const res  = await fetch('/api/check-serial', {
+    const res  = await fetch(APP_ROOT + '/api/check-serial', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ serial_num: serial }),
@@ -179,7 +179,7 @@ async function doSubmit() {
   setStatus('Saving…');
 
   try {
-    const res  = await fetch('/api/submit', {
+    const res  = await fetch(APP_ROOT + '/api/submit', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({

@@ -1,6 +1,7 @@
 import os, csv, datetime, configparser
 from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, render_template
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 import pymysql, pymysql.cursors
 from contextlib import contextmanager
@@ -175,6 +176,9 @@ def save_to_csv(record, mode="production"):
 # ─────────────────────────────────────────────
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+
+# Behind kts-proxy the app is served under a path prefix (X-Forwarded-Prefix).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.route("/")
 def index():
